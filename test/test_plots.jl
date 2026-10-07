@@ -22,3 +22,13 @@ Gh,_ = tfest(d)
 plot(Gh, plotphase=true)
 
 plot(tfest(d))
+
+# FRD in the ControlSystemsBase plot recipes, which pass keyword arguments such as balance and adaptive
+w = exp10.(LinRange(-1, 1, 50))
+frd = FRD(w, tf(1, [1, 1, 1]))
+mag, phase, _ = bode(frd, w; unwrap=false, balance=true)
+@test vec(mag) ≈ abs.(frd.r)
+bodeplot(frd)
+bodeplot([frd, frd])
+nyquistplot(frd)
+sigmaplot(frd)
