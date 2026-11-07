@@ -112,6 +112,7 @@ ControlSystemsBase.noutputs(f::FRD) = f.r isa AbstractVector ? 1 : size(f.r, 1)
 ControlSystemsBase.ninputs(f::FRD) = f.r isa AbstractVector ? 1 : size(f.r, 2)
 ControlSystemsBase._default_freq_vector(f::Vector{<:FRD}, ::Any; kwargs...) = f[1].w
 ControlSystemsBase._default_freq_vector(f::FRD, ::Any; kwargs...) = f.w
+ControlSystemsBase.numeric_type(::Type{<:FRD{<:Any,RT}}) where RT = eltype(RT) # Used by, e.g., the nyquistplot recipe. FRD is not rational, so the recipe computes no poles or zeros
 function ControlSystemsBase.bode(f::FRD, w::AbstractVector = f.w; unwrap=true, kwargs...) # kwargs such as balance do not apply to frequency-response data
     w == f.w || error("Frequency vector must match the one stored in the FRD")
     angles = angle.(f.r)
