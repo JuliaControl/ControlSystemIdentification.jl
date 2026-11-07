@@ -58,7 +58,7 @@ makedocs(
 )
 
 deploydocs(
-      repo = "github.com/baggepinnen/ControlSystemIdentification.jl.git",
+      repo = "github.com/JuliaControl/ControlSystemIdentification.jl.git",
 )
 
 cd(@__DIR__)
