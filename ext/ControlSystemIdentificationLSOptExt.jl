@@ -118,7 +118,7 @@ function _inner_pem(
     function get_ukf(px0::Vector{T}) where {T}
         pᵢ = px0[1:length(p0)]
         x0i = optimize_x0 ? px0[x0inds] : x0
-        UnscentedKalmanFilter(discrete_dynamics, measurement, R1, R2, SimpleMvNormal(T.(x0i), T.(R1mut)); ny, nu, p=pᵢ)
+        UnscentedKalmanFilter(discrete_dynamics, measurement, R1, R2, SimpleMvNormal(T.(x0i), T.(R1mut)); ny, nu, p=pᵢ, Ts)
     end
 
     function residuals!(ϵ, px0)
@@ -207,7 +207,7 @@ function ControlSystemIdentification.predict(model::NonlinearPredictionErrorMode
     h == 1 || h == 0 || throw(ArgumentError("Only h=1 is supported at the moment"))
     reset!(model.ukf; x0)
     sol = forward_trajectory(model.ukf, d, p)
-    yh = model.ukf.measurement.(h == 1 ? sol.x : sol.xt, eachcol(d.u), Ref(p), 1:length(d))
+    yh = model.ukf.measurement.(h == 1 ? sol.x : sol.xt, eachcol(d.u), Ref(p), range(0, step = d.Ts, length = length(d)))
     reduce(hcat, yh)
 end
 

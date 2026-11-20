@@ -181,3 +181,25 @@ modelγ = ControlSystemIdentification.nonlinear_pem(d, discrete_dynamics, measur
     @test 0.6 < mean_est_3[1] / emp_var_3[1] < 1.7
     @test 0.6 < mean_est_3[2] / emp_var_3[2] < 1.7
 end
+
+@testset "nonlinear_pem with time-dependent dynamics and Ts ≠ 1" begin
+    # The dynamics depend on t through a known forcing sin(t); the estimate is correct only if the
+    # filter receives the sample interval of the data.
+    Tsv = 0.1
+    ctd(x, u, p, t) = SA[-p[1]*x[1] + p[2]*u[1] + sin(t)]
+    dyn = SeeToDee.Rk4(ctd, Tsv)
+    meas(x, u, p, t) = SA[x[1]]
+    pv = [0.8, 1.5]
+    uv = [SA[sign(sin(0.3k))] for k in 0:599]
+    tv = range(0, step = Tsv, length = length(uv))
+    xv = [SA[0.0]]
+    for k in 1:length(uv)-1
+        push!(xv, dyn(xv[end], uv[k], pv, tv[k]))
+    end
+    yv = meas.(xv, uv, Ref(pv), tv)
+    dv = iddata(reduce(hcat, yv), reduce(hcat, uv), Tsv)
+    modelv = ControlSystemIdentification.nonlinear_pem(dv, dyn, meas, [0.5, 1.0], [0.0], 1e-6I(1), 1e-4I(1), 1)
+    @test modelv.ukf.Ts == Tsv
+    @test modelv.p ≈ pv rtol = 1e-3
+    @test ControlSystemIdentification.predict(modelv, dv) ≈ reduce(hcat, yv) atol = 1e-2
+end
