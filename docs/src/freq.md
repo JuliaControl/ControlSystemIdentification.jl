@@ -40,6 +40,15 @@ DisplayAs.PNG(current()) # hide
 
 The left figure displays the Bode magnitude of the true system, together with the estimate (noisy), and the middle figure illustrates the estimated noise model. The right figure displays the coherence function ([`coherenceplot`](@ref)), which is close to 1 everywhere except for at the resonance peak of the noise `log10(sqrt(0.3)) = -0.26`.
 
+### Multiple data segments
+When data is available as several separate segments, for example from repeated experiments or from disjoint parts of one experiment, [`tfest`](@ref) and [`coherence`](@ref) accept a vector of data objects. The Welch method is then applied with every window lying within a single segment, and the cross- and auto-spectral sums are accumulated over the windows of all segments before the estimates are formed. The result is thus the Welch estimate over all windows of all segments, rather than an average of estimates of the individual segments. The segments may have different lengths, and a segment shorter than the window length `n` does not contribute.
+```@example npfreq
+ds = [dn[1:20000], dn[30000:45000], dn[60000:end]] # Three disjoint segments
+G,N = tfest(ds; n = 1000)
+k   = coherence(ds; n = 1000)
+nothing # hide
+```
+
 See the [example notebooks](https://github.com/JuliaControl/ControlExamples.jl?files=1) for more details.
 
 ## Parametric estimation

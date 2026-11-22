@@ -208,6 +208,8 @@ Both `H` and `N` are of type `FRD` (frequency-response data).
 - `N` = Sy - |Syu|²/Suu     Estimated Noise PSD (also an estimate of the variance of ``H``). Note that a PSD is related to the "noise model" ``N_m`` used in the system identification literature as ``N_{psd} = N_m^* N_m``. The magnitude curve of the noise model can be visualized by plotting `√(N)`.
 - `method`: `:welch` or `:corr`. `:welch` uses the Welch method to estimate the power spectral density, while `:corr` (default) uses the Correlogram approach. If `method = :welch`, the additional keyword arguments `n`, `noverlap` and `window` determine the number of samples per segment (default 10% of data), the number of samples to overlap between segments (default 50%), and the window function to use (default `hamming`), respectively.
 
+A Welch estimate pooled over several data segments is obtained by passing a vector of data objects, see `tfest(ds::AbstractVector{<:AbstractIdData})`.
+
 # Extended help
 This estimation method is unbiased if the input ``u`` is uncorrelated with the noise ``n``, but is otherwise biased (e.g., for identification in closed loop).
 """
@@ -225,10 +227,54 @@ function tfest(d::AbstractIdData, σ::Real = 0.05; method = :corr, n = length(d)
     elseif method === :corr
         Syy, Suu, Syu = fft_corr(y, u, σ)
     else error("Unknown method $method") end
+    return spectra2tfest(Syy, Suu, Syu, h, length(y))
+end
+
+"""
+    H, N = tfest(ds::AbstractVector{<:AbstractIdData}; n = minimum(length, ds) ÷ 10, noverlap = n ÷ 2, window = hamming)
+
+Estimate a transfer function using the Welch method, pooled over several data segments `ds` (for example, separate experiments or disjoint parts of one experiment). The segments may have different lengths, but must share the sample time and the numbers of inputs and outputs.
+
+Every Welch window lies within a single segment. The cross- and auto-spectral sums are accumulated over the windows of all segments before `H` and `N` are formed, so that the result equals the Welch estimate over the union of the windows of all segments, rather than an average of per-segment estimates. A segment shorter than `n` contains no window and does not contribute. With a single segment, the result equals that of `tfest(ds[1]; method = :welch, n, noverlap, window)`.
+
+The keyword arguments `n`, `noverlap` and `window` have the same meaning as for `tfest(d; method = :welch)`. The noise spectrum `N` is normalized by the total number of samples in the contributing segments. Only `method = :welch` is supported for multiple segments.
+
+See also [`coherence`](@ref), which accepts a vector of data segments in the same way.
+"""
+function tfest(ds::AbstractVector{<:AbstractIdData}; method = :welch, n = minimum(length, ds) ÷ 10, noverlap = n ÷ 2, window = hamming)
+    method === :welch || throw(ArgumentError("tfest with multiple data segments only supports method = :welch"))
+    h, ny = check_segments(ds)
+    if ny > 1
+        HNs = [tfest([d[i,1] for d in ds]; n, noverlap, window) for i in 1:ny]
+        HR = reshape(reduce(vcat, [transpose(hn[1].r) for hn in HNs]), ny, 1, :)
+        NR = reshape(reduce(vcat, [transpose(hn[2].r) for hn in HNs]), ny, 1, :)
+        return FRD(HNs[1][1].w, HR), FRD(HNs[1][1].w, NR)
+    end
+    ys = [vec(output(d)) for d in ds]
+    us = [vec(input(d)) for d in ds]
+    Syy, Suu, Syu = wcfft(ys, us; n, noverlap, window)
+    L = sum(length(y) for y in ys if length(y) >= n)
+    return spectra2tfest(Syy, Suu, Syu, h, L)
+end
+
+function spectra2tfest(Syy, Suu, Syu, h, L)
     w = freqvec(h, Syu)
     H = FRD(w, Syu ./ Suu)
-    N = FRD(w, real.(Syy .- abs2.(Syu) ./ Suu) ./ length(y))
+    N = FRD(w, real.(Syy .- abs2.(Syu) ./ Suu) ./ L)
     return H, N
+end
+
+"""
+    h, ny = check_segments(ds)
+
+Verify that the data segments `ds` are non-empty, single-input, and share the sample time and the number of outputs. Returns the common sample time and number of outputs.
+"""
+function check_segments(ds::AbstractVector{<:AbstractIdData})
+    isempty(ds) && throw(ArgumentError("At least one data segment is required"))
+    allequal(sampletime(d) for d in ds) || throw(ArgumentError("All data segments must have the same sample time"))
+    allequal(noutputs(d) for d in ds) || throw(ArgumentError("All data segments must have the same number of outputs"))
+    all(ninputs(d) == 1 for d in ds) || throw(ArgumentError("Spectral estimation with multiple data segments only supports single-input data"))
+    sampletime(ds[1]), noutputs(ds[1])
 end
 
 function fft_corr(y, u, σ = 0.05)
@@ -250,6 +296,8 @@ Calculates the magnitude-squared coherence Function. κ² close to 1 indicates a
 
 - κ: Squared coherence function in the form of an [`FRD`](@ref).
 - `method`: `:welch` or `:corr`. `:welch` uses the Welch method to estimate the power spectral density, while `:corr` uses the Correlogram approach . For `method = :corr`, the additional keyword argument `σ` determines the width of the Gaussian window applied to the estimated correlation functions before FFT. A larger `σ` implies less smoothing.
+
+A Welch estimate pooled over several data segments is obtained by passing a vector of data objects, see `coherence(ds::AbstractVector{<:AbstractIdData})`.
 
 See also [`coherenceplot`](@ref)
 
@@ -273,25 +321,64 @@ function coherence(d::AbstractIdData; n = length(d) ÷ 10, noverlap = n ÷ 2, wi
         Syy = real(Syy0)
         Suu = real(Suu0)
     end
-    k = @. abs2(Syu) / (Suu * Syy) # [end÷2+1:end]
-    Sch = FRD(freqvec(h, k), k)
-    return Sch
+    return spectra2coherence(Syy, Suu, Syu, h)
 end
 
-function wcfft(y, u; n = length(y) ÷ 10, noverlap = n ÷ 2, window = hamming)
+"""
+    κ² = coherence(ds::AbstractVector{<:AbstractIdData}; n = minimum(length, ds) ÷ 10, noverlap = n ÷ 2, window = hamming)
+
+Calculate the magnitude-squared coherence function using the Welch method, pooled over several data segments `ds` of possibly different lengths. The cross- and auto-spectral sums are accumulated over the Welch windows of all segments, each window lying within a single segment, before the coherence is formed. A segment shorter than `n` does not contribute. With a single segment, the result equals that of `coherence(ds[1]; n, noverlap, window)`.
+
+Only single-input, single-output data and `method = :welch` are supported for multiple segments. See [`tfest`](@ref) for the corresponding transfer-function estimate.
+"""
+function coherence(ds::AbstractVector{<:AbstractIdData}; method = :welch, n = minimum(length, ds) ÷ 10, noverlap = n ÷ 2, window = hamming)
+    method === :welch || throw(ArgumentError("coherence with multiple data segments only supports method = :welch"))
+    h, ny = check_segments(ds)
+    ny == 1 || throw(ArgumentError("coherence only supports a single output. Index the data objects like `d[i,:]` to obtain the `i`:th output."))
+    Syy, Suu, Syu = wcfft([vec(output(d)) for d in ds], [vec(input(d)) for d in ds]; n, noverlap, window)
+    return spectra2coherence(Syy, Suu, Syu, h)
+end
+
+function spectra2coherence(Syy, Suu, Syu, h)
+    k = @. abs2(Syu) / (Suu * Syy)
+    FRD(freqvec(h, k), k)
+end
+
+"""
+    Syy, Suu, Syu = wcfft(y, u; n = length(y) ÷ 10, noverlap = n ÷ 2, window = hamming)
+    Syy, Suu, Syu = wcfft(ys::AbstractVector{<:AbstractVector}, us::AbstractVector{<:AbstractVector}; n, noverlap, window)
+
+Sums of the windowed periodograms (Welch method) of the output `y` and input `u`: the auto-spectral sums `Syy`, `Suu` and the cross-spectral sum `Syu`, over the non-negative frequency bins. The sums are not normalized by the number of windows.
+
+If vectors of signal segments `ys, us` are given, the sums are accumulated over the windows of all segments, with every window lying within a single segment. A segment shorter than `n` contributes no window.
+"""
+wcfft(y::AbstractVector{<:Number}, u::AbstractVector{<:Number}; n = length(y) ÷ 10, kwargs...) =
+    wcfft([y], [u]; n, kwargs...)
+
+function wcfft(ys::AbstractVector{<:AbstractVector}, us::AbstractVector{<:AbstractVector}; n = minimum(length, ys) ÷ 10, noverlap = n ÷ 2, window = hamming)
+    length(ys) == length(us) || throw(DimensionMismatch("The numbers of output and input segments differ"))
     win, norm2 = DSP.Periodograms.compute_window(window, n)
-    uw = arraysplit(u, n, noverlap, nextfastfft(n), win)
-    yw = arraysplit(y, n, noverlap, nextfastfft(n), win)
-    Syy = zeros(length(uw[1]) ÷ 2 + 1)
-    Suu = zeros(length(uw[1]) ÷ 2 + 1)
-    Syu = zeros(ComplexF64, length(uw[1]) ÷ 2 + 1)
-    for i in eachindex(uw)
-        xy = rfft(yw[i])
-        xu = rfft(uw[i])
-        @. Syu += xy * conj(xu)
-        @. Syy += abs2(xy)
-        @. Suu += abs2(xu)
+    nfft = nextfastfft(n)
+    nf = nfft ÷ 2 + 1
+    Syy = zeros(nf)
+    Suu = zeros(nf)
+    Syu = zeros(ComplexF64, nf)
+    nwin = 0
+    for (y, u) in zip(ys, us)
+        length(y) == length(u) || throw(DimensionMismatch("Input and output segments have different lengths"))
+        length(y) >= n || continue
+        uw = arraysplit(u, n, noverlap, nfft, win)
+        yw = arraysplit(y, n, noverlap, nfft, win)
+        for i in eachindex(uw)
+            xy = rfft(yw[i])
+            xu = rfft(uw[i])
+            @. Syu += xy * conj(xu)
+            @. Syy += abs2(xy)
+            @. Suu += abs2(xu)
+        end
+        nwin += length(uw)
     end
+    nwin > 0 || throw(ArgumentError("No data segment is at least as long as the window length n = $n"))
     Syy, Suu, Syu
 end
 
