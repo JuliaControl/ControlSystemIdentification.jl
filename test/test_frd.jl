@@ -189,3 +189,68 @@ frd = FRD(w, G);                        # Build a frequency-response data object
 # Tests for FRD printing
 littlefrd = FRD([1, 2], [im, 2*im])
 @test_nowarn show(littlefrd)
+@testset "Welch estimation over multiple data segments" begin
+    @info "Testing Welch estimation over multiple data segments"
+    Random.seed!(0)
+    G = tf([1, 0.5], [1, -0.9, 0.5], 1)
+    nw = 256
+    kw = (; n = nw, noverlap = nw ÷ 2, window = DSP.hanning)
+
+    # A single segment gives the same result as the single-dataset method
+    u1 = randn(1, 3000)
+    d1 = iddata(lsim(G, u1)[1] .+ 0.1 .* randn(1, 3000), u1, 1)
+    H1, N1 = tfest(d1; method = :welch, kw...)
+    Hv, Nv = tfest([d1]; kw...)
+    @test Hv.w == H1.w
+    @test Hv.r ≈ H1.r
+    @test Nv.r ≈ N1.r
+    @test coherence([d1]; kw...).r ≈ coherence(d1; kw...).r
+    @test tfest([d1])[1].r ≈ tfest(d1, method = :welch)[1].r # default window length
+    @test coherence([d1]).r ≈ coherence(d1).r
+
+    # Several segments of different lengths give the result of summing the Welch windows
+    # of all segments; a segment shorter than the window contributes nothing
+    lengths = [3000, 1700, 900, 2600, nw - 1]
+    ds = map(lengths) do N
+        u = randn(1, N)
+        iddata(lsim(G, u)[1] .+ 0.2 .* randn(1, N), u, 1)
+    end
+    sums = [CSI.wcfft(vec(d.y), vec(d.u); kw...) for d in ds[1:end-1]]
+    Syy = sum(s[1] for s in sums)
+    Suu = sum(s[2] for s in sums)
+    Syu = sum(s[3] for s in sums)
+    Ryy, Ruu, Ryu = CSI.wcfft([vec(d.y) for d in ds], [vec(d.u) for d in ds]; kw...)
+    @test Ryy ≈ Syy
+    @test Ruu ≈ Suu
+    @test Ryu ≈ Syu
+    H, N = tfest(ds; kw...)
+    @test H.r ≈ Syu ./ Suu
+    @test N.r ≈ (Syy .- abs2.(Syu) ./ Suu) ./ sum(lengths[1:end-1])
+    @test coherence(ds; kw...).r ≈ abs2.(Syu) ./ (Suu .* Syy)
+
+    # A known transfer function is recovered from several noisy segments
+    ds = map(1:20) do _
+        N = rand(1000:4000)
+        u = randn(1, N)
+        iddata(lsim(G, u)[1] .+ 0.1 .* randn(1, N), u, 1)
+    end
+    H, N = tfest(ds; kw...)
+    k = coherence(ds; kw...)
+    band = findall(w -> 0 < w < 2, H.w) # the band where the output is dominated by the input
+    Gtrue = vec(freqresp(G, H.w[band]))
+    @test maximum(abs.(H.r[band] .- Gtrue) ./ abs.(Gtrue)) < 0.05
+    @test minimum(k.r[band]) > 0.95
+
+    # Multiple outputs are handled output by output
+    dsm = [iddata([vec(d.y) vec(d.y)]', d.u, 1) for d in ds[1:3]]
+    Hm, Nm = tfest(dsm; kw...)
+    Hs, Ns = tfest(ds[1:3]; kw...)
+    @test size(Hm.r) == (2, 1, length(Hs.w))
+    @test Hm.r[2, 1, :] ≈ Hs.r
+
+    # Errors
+    @test_throws ArgumentError tfest(ds; method = :corr)
+    @test_throws ArgumentError coherence(ds; method = :corr)
+    @test_throws ArgumentError tfest([ds[1], iddata(ds[2].y, ds[2].u, 2)]; kw...)
+    @test_throws ArgumentError tfest(ds[1:2]; n = 10^5)
+end
