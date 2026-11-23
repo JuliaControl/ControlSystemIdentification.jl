@@ -3,7 +3,7 @@ A frequent property of control systems is the presence of _delays_, either due t
 
 ## Estimating the delay
 
-The simulated experiments are started at rest, and unless noise is stated explicitly, the data are noise-free in order to make the effect of each method visible. The random number generator is seeded to make the example reproducible.
+The simulated experiments start at rest, and the data are noise-free unless stated otherwise.
 
 ```@example DELAY
 using Plots, Random
@@ -31,11 +31,10 @@ P.nx
 ### The delay convention
 A discrete-time system that is strictly proper has at least a one-sample delay between the input and the output, the output at time ``k`` cannot depend on the input at time ``k``. The `inputdelay` keyword of, e.g., [`arx`](@ref) counts this sample: the default `inputdelay = 1` is a system without any additional delay, `inputdelay = 0` is a system with a direct term, and a strictly proper system with a relative degree of one and a pure delay of ``n`` samples has `inputdelay = n + 1` (in general, `inputdelay = n + r` for a relative degree ``r``). The system `P` above has a pure delay of `τ_samples` samples, and thus corresponds to `inputdelay = τ_samples + 1`. We will use this convention throughout this page.
 
-### Cross-correlation
 A simple, non-parametric way of figuring out whether or not there's a delay in the system is to look at the cross-correlation between the input and the output, we can do this using the [`crosscorplot`](@ref) function:
 
 ```@example DELAY
-crosscorplot(d, -10:40)
+crosscorplot(d)
 ```
 The dashed lines indicate the confidence interval within which the correlation is considered insignificant, but they are only valid if the input is white. The cross-correlation between the input and the output is the impulse response of the system convolved with the autocorrelation of the input. If the input is not white, as in this case, the autocorrelation of the input causes a correlation to appear also at lags that are _shorter_ than the delay, and the plot above indicates a significant correlation at lags well below the true delay of two seconds.
 
@@ -47,42 +46,45 @@ function prewhiten(d, na = 5)
     W   = 1/Gar                     # Whitening filter A
     iddata(lsim(W, d.y)[1], lsim(W, d.u)[1], d.Ts)
 end
-crosscorplot(prewhiten(d), -10:40)
+crosscorplot(prewhiten(d))
 ```
 The prewhitened cross-correlation is insignificant for lags shorter than the delay, and starts to rise at a lag of two seconds plus one sample, in agreement with the convention above. The estimate obtained in this way is an approximation: the correlation exceeds the confidence interval some samples after the true delay since the impulse response of the system without delay starts at zero, and the dashed lines are valid for each lag individually, meaning that a few lags are expected to exceed them by chance in a long plot.
 
-### Impulse response
-Another method to identify the delay is to estimate the impulse response of the system, which is zero until the delay has elapsed:
+Another method to identify the delay would be to estimate the impulse response of the system:
 ```@example DELAY
-impulseestplot(d, 100; λ=0, lab="Estimated", title="Impulse response of delay system")
-plot!(impulse(P, 10), lab="True", framestyle=:zerolines)
+impulseestplot(d, 60; λ=0.5, lab="Estimated", title="Impulse response of delay system")
+plot!(impulse(P, 6), lab="True", framestyle=:zerolines)
 ```
-The impulse response is estimated by fitting a long FIR model, which has many parameters and is sensitive to noise. This can be mitigated by regularization with a parameter ``λ``, which introduces a bias towards small impulse-response coefficients in exchange for a lower variance. The regularization parameter is not known beforehand, but it _can_ be tuned using data: we estimate the impulse response for a number of values of ``λ`` using one dataset, and evaluate the simulation fit of the corresponding FIR models on a second dataset obtained from a separate experiment. We add measurement noise to both datasets to make this realistic:
+Estimation of impulse responses in the presence of such large delays is numerically challenging, and a regularization of ``λ=0.5`` was required to achieve a reasonable result. If the delay is expected to be large and the dataset is small, the cross-correlation method may be preferable, since the regularization parameter ``λ`` must be tuned, e.g., by evaluating the simulation fit of the estimated impulse response on a separate validation dataset, and the result depends on the excitation and the noise level. However, for short delays and large datasets, the impulse-response method works rather well. Below, we show the estimated impulse response for a much larger dataset just to demonstrate:
+```@example DELAY
+u2 = sin.(0.01 .* (0:Ts:300).^2) .+ randn.() # An interesting and long input signal with some noise as well
+res2 = lsim(P, u2')
+d2 = iddata(res2)
 
+impulseestplot(d2, 200; λ=0.0, lab="Estimated", title="Impulse response with large dataset")
+plot!(impulse(P, 20), lab="True", framestyle=:zerolines)
+```
+
+We first create noisy estimation and validation datasets:
 ```@example DELAY
 σ = 0.1 # Standard deviation of the measurement noise
 noisy(N) = (u = colored(N); iddata(lsim(P, u)[1] .+ σ*randn(1, N), u, Ts))
 dn, dval = noisy(200), noisy(200) # Estimation and validation data
-
-n  = 100 # Number of FIR coefficients
-λs = exp10.(-4:0.5:3)
-fits = map(λs) do λ
-    ir, _ = impulseest(dn, n; λ)
-    Gfir  = tf(Ts .* ir, [1; zeros(n - 1)], Ts) # impulseest returns the impulse response divided by Ts
-    modelfit(dval.y, lsim(Gfir, dval.u)[1])[]
-end
-λbest = λs[argmax(fits)]
-plot(
-    plot(λs, fits, xscale=:log10, xlabel="λ", ylabel="Validation fit [%]", m=:o, legend=false),
-    impulseestplot(dn, n; λ=λbest, lab="Estimated", title="Impulse response, λ = $(round(λbest, sigdigits=2))"),
-    size=(900, 300),
-)
-plot!(impulse(P, 10), lab="True", framestyle=:zerolines, sp=2)
 ```
-The dashed lines in the right plot indicate an approximate interval of two standard deviations of the estimate, which does not account for the bias introduced by the regularization. The validation curve shows how the choice of ``λ`` is a trade-off between bias and variance: for small values the FIR model, which has about as many parameters as there are samples, adapts to the noise, and for large values the impulse response is suppressed. The best validation fit is obtained for an intermediate value. The number of coefficients `n` must be large enough to cover both the delay and the response of the system, and the result depends on the excitation, the number of samples and the noise level, and not only on the delay. If the dataset is small, the cross-correlation and the delay sweep below are less demanding alternatives.
 
-### Delay sweep
-A third method is to estimate a low-order model for each of a number of candidate delays, and compare how well the models explain the validation data. The function [`find_delay`](@ref) fits an [`arx`](@ref) model with `inputdelay = k` for each candidate `k` and returns the one with the smallest simulation error on the validation data. The orders `na` and `nb` should be chosen to represent the system _without_ delay, and `nb` should not be much larger than the number of numerator coefficients of that system, since a long B polynomial can compensate a too short delay on its own. The delay-free system above has two numerator coefficients, and two poles. Since [`arx`](@ref) is biased by output noise, we choose a slightly larger `na` for the noisy data:
+A third method, arguably less elegant, is to use a model-selection method to figure out the delay. Presumably, models estimated with an order smaller than the delay will be rather poor, something that should be visible if we try models of many orders. Below, we use the function [`find_nanb`](@ref) that tries to identify the appropriate model order for an [`arx`](@ref) model. Information criteria such as AIC are not informative for noise-free data, since the prediction error vanishes for all models of sufficient order, we thus use the noisy dataset.
+
+```@example DELAY
+find_nanb(dn, 2:8, 10:30, xrotation=90, size=(800, 300), margin=5Plots.mm, xtickfont=6)
+```
+The prediction error tends to decrease once `nb` is large enough to cover the delay, which happens to be the number of delay samples ``\tau / T_s`` + the number of numerator parameters for the system without delay:
+```@example DELAY
+c2d(tf(1, [1, 0.5, 1]), Ts)
+```
+The criterion does not have a sharp minimum in this case, and models with a smaller `nb` and a dedicated `inputdelay` are more parsimonious, which is the approach of [`find_delay`](@ref).
+
+
+A fourth method is to estimate a low-order model for each of a number of candidate delays, and compare how well the models explain the validation data. The function [`find_delay`](@ref) fits an [`arx`](@ref) model with `inputdelay = k` for each candidate `k` and returns the one with the smallest simulation error on the validation data. The orders `na` and `nb` should be chosen to represent the system _without_ delay, and `nb` should not be much larger than the number of numerator coefficients of that system, since a long B polynomial can compensate a too short delay on its own. The delay-free system above has two numerator coefficients, and two poles. Since [`arx`](@ref) is biased by output noise, we choose a slightly larger `na` for the noisy data:
 
 ```@example DELAY
 sweep = find_delay(dn, 6, 4, 0:40; dval)
@@ -96,25 +98,13 @@ The simulation error has a distinct minimum, which is located at or near the tru
 sweep_noisefree = find_delay(d, 2, 2, 0:40; dval = iddata(lsim(P, colored(600))))
 ```
 
-### Model-order selection
-A fourth method, arguably less elegant, is to use a model-selection method to figure out the delay. Presumably, models estimated with an order smaller than the delay will be rather poor, something that should be visible if we try models of many orders. Below, we use the function [`find_nanb`](@ref) that tries to identify the appropriate model order for an [`arx`](@ref) model. Information criteria such as AIC are not informative for noise-free data, since the prediction error vanishes for all models of sufficient order, we thus use the noisy dataset.
-
-```@example DELAY
-find_nanb(dn, 2:8, 10:30, xrotation=90, size=(800, 300), margin=5Plots.mm, xtickfont=6)
-```
-The prediction error tends to decrease once `nb` is large enough to cover the delay, which happens to be the number of delay samples ``\tau / T_s`` + the number of numerator parameters for the system without delay:
-```@example DELAY
-c2d(tf(1, [1, 0.5, 1]), Ts)
-```
-The criterion does not have a sharp minimum in this case, and models with a smaller `nb` and a dedicated `inputdelay` are more parsimonious, which is the approach of [`find_delay`](@ref).
-
 
 ## Handling the delay when estimating a model
-Once we know that there is a delay present, we need to somehow handle it while estimating a model. The naive way is to simply select a model with high-enough order. However, this is prone to numerical problems and generally not recommended. Some methods have a dedicated `inputdelay` keyword that allows you to specify known input delays, after which the method handles it internally. For methods that do not have this option, one can always preprocess the data to remove the delay, we show how to do this next:
+Once we know that there is a delay present, we need to somehow handle it while estimating a model. The naive way is to simply select a model with high-enough order and call it a day. However, this is prone to numerical problems and generally not recommended. Some methods have a dedicated `inputdelay` keyword that allows you to specify known input delays, after which the method handles it internally. For methods that do not have this option, one can always preprocess the data to remove the delay, we show how to do this next:
 
 ```@example DELAY
 d_shifted = iddata(d.y[:, τ_samples+1:end], d.u[:, 1:end-τ_samples], d.Ts)
-crosscorplot(prewhiten(d_shifted), -10:40)
+crosscorplot(prewhiten(d_shifted))
 ```
 The (prewhitened) cross-correlation plot now indicates that the delay is gone. Please note, one sample delay is most of the time expected, indeed, it's unrealistic for the output of a physical system to respond at the same time as something happens at the input. Once we have estimated a model with the dataset with the delay removed, we must add the delay back into the estimated model, e.g.,
 ```@example DELAY
@@ -151,10 +141,10 @@ plot(nyquistplot(L), plot(step(G, 50)))
 ref = colored(500) # Reference signal
 res = lsim(G, ref)
 dG = iddata(res)
-plot(plot(dG), crosscorplot(prewhiten(dG), -10:40))
+plot(plot(dG), crosscorplot(prewhiten(dG)))
 ```
 
-We see that the cross-correlation plot still indicates that it takes more than 2 seconds for the output to be affected by the input, but if we look at the model-selection plot, we must include orders up to above 23 to get a good fit:
+We see that the cross-correlation plot still indicates that it takes over 2 seconds for the output to be affected by the input, but if we look at the model-selection plot, we must include orders up to above 23 to get a good fit:
 
 
 ```@example DELAY
@@ -239,7 +229,7 @@ sweepE = find_delay(decho, 4, 4, 0:40)
 plot(sweepE)
 ```
 
-Fitting a 4:th order model with an input delay of `τ_samples + 1` samples does not work, but fitting a 24:th order model does, and fitting a 4:th order model using subspace identification with a long internal prediction horizon works reasonably well
+trying to estimate a 4:th order model with input delay of 21 samples does not work at all this time, but fitting a 24:th order model does, and fitting a 4:th order model using subspace identification with a long internal prediction horizon works reasonably well
 ```@example DELAY
 model3 = arx(decho, 4, 4, inputdelay=τ_samples+1)
 model4 = subspaceid(decho, 24)
