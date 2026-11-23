@@ -65,12 +65,29 @@ impulseestplot(d2, 200; λ=0.0, lab="Estimated", title="Impulse response with la
 plot!(impulse(P, 20), lab="True", framestyle=:zerolines)
 ```
 
-We first create noisy estimation and validation datasets:
+The impulse response is estimated by fitting a long FIR model, which has many parameters and is sensitive to noise. This can be mitigated by regularization with a parameter ``λ``, which introduces a bias towards small impulse-response coefficients in exchange for a lower variance. The regularization parameter is not known beforehand, but it _can_ be tuned using data: we estimate the impulse response for a number of values of ``λ`` using one dataset, and evaluate the simulation fit of the corresponding FIR models on a second dataset obtained from a separate experiment. We add measurement noise to both datasets to make this realistic:
+
 ```@example DELAY
 σ = 0.1 # Standard deviation of the measurement noise
 noisy(N) = (u = colored(N); iddata(lsim(P, u)[1] .+ σ*randn(1, N), u, Ts))
 dn, dval = noisy(200), noisy(200) # Estimation and validation data
+
+n  = 100 # Number of FIR coefficients
+λs = exp10.(-4:0.5:3)
+fits = map(λs) do λ
+    ir, _ = impulseest(dn, n; λ)
+    Gfir  = tf(Ts .* ir, [1; zeros(n - 1)], Ts) # impulseest returns the impulse response divided by Ts
+    modelfit(dval.y, lsim(Gfir, dval.u)[1])[]
+end
+λbest = λs[argmax(fits)]
+plot(
+    plot(λs, fits, xscale=:log10, xlabel="λ", ylabel="Validation fit [%]", m=:o, legend=false),
+    impulseestplot(dn, n; λ=λbest, lab="Estimated", title="Impulse response, λ = $(round(λbest, sigdigits=2))"),
+    size=(900, 300),
+)
+plot!(impulse(P, 10), lab="True", framestyle=:zerolines, sp=2)
 ```
+The dashed lines in the right plot indicate an approximate interval of two standard deviations of the estimate, which does not account for the bias introduced by the regularization. The validation curve shows how the choice of ``λ`` is a trade-off between bias and variance: for small values the FIR model, which has about as many parameters as there are samples, adapts to the noise, and for large values the impulse response is suppressed. The best validation fit is obtained for an intermediate value. The number of coefficients `n` must be large enough to cover both the delay and the response of the system, and the result depends on the excitation, the number of samples and the noise level, and not only on the delay. If the dataset is small, the cross-correlation and the delay sweep below are less demanding alternatives.
 
 A third method, arguably less elegant, is to use a model-selection method to figure out the delay. Presumably, models estimated with an order smaller than the delay will be rather poor, something that should be visible if we try models of many orders. Below, we use the function [`find_nanb`](@ref) that tries to identify the appropriate model order for an [`arx`](@ref) model. Information criteria such as AIC are not informative for noise-free data, since the prediction error vanishes for all models of sufficient order, we thus use the noisy dataset.
 
