@@ -28,7 +28,7 @@ end
 
 Estimate the input delay of a single-input single-output system by fitting one ARX model [`arx`](@ref)`(d, na, nb; inputdelay = k, kwargs...)` for each candidate delay `k` in `delays` and comparing the models on validation data.
 
-The delay convention is the same as for the `inputdelay` keyword of [`arx`](@ref): `k = 1` is the default and corresponds to a system without any delay beyond the one sample that is required for causality of a strictly proper discrete-time system, `k = 0` corresponds to a direct term, and a plant with a pure delay of `n` samples has `k = n + 1`.
+The delay convention is the same as for the `inputdelay` keyword of [`arx`](@ref): `k = 1` is the default and corresponds to a system without any delay beyond the one sample that is required for causality of a strictly proper discrete-time system, and `k = 0` corresponds to a direct term. A strictly proper plant with a relative degree of one and a pure delay of `n` samples thus has `k = n + 1`, while in general `k = n + r`, where `r` is the relative degree of the discrete-time dynamics without the delay.
 
 The orders `na` and `nb` determine the dynamics that can be represented by each candidate model. `nb` should not be much larger than the number of numerator coefficients of the delay-free system, since a large `nb` allows the estimator to compensate a too short delay with leading coefficients of the B polynomial, which flattens the loss as a function of the delay. `na` should be at least the order of the delay-free system, and somewhat larger if the data contains measurement noise, since [`arx`](@ref) is biased by output noise and a too small `na` results in a biased delay estimate. The estimate is therefore most accurate for data with a high signal-to-noise ratio, and should otherwise be considered approximate, in which case the estimated delay can be refined by comparing other model structures using the same validation data.
 
@@ -38,7 +38,7 @@ The orders `na` and `nb` determine the dynamics that can be represented by each 
 - `delays`: Candidate delays in samples.
 - `dval`: Validation data. It is recommended to provide data that was not used for estimation. Defaults to `d`.
 - `metric`: Either `:simulation` (default) or `:prediction`. The simulation error is considerably more sensitive to a wrong delay than the one-step prediction error, but requires that `dval` starts from rest (or that `skip` is chosen to exclude the transient). The prediction error is computed from the measured outputs and is not affected by the initial state.
-- `skip`: The number of initial samples of `dval` that are excluded from the loss. By default `0` for `:simulation` and the largest regressor length among the candidates for `:prediction`, such that all candidates are compared on the same samples.
+- `skip`: The number of initial samples of `dval` that are excluded from the loss. By default `0` for `:simulation` and the largest regressor length among the candidates for `:prediction`, such that all candidates are compared on the same samples. For `:prediction`, a smaller value is rejected.
 - `kwargs`: Additional keyword arguments are passed to [`arx`](@ref), e.g., `λ` for regularization.
 
 # Returns
@@ -73,8 +73,14 @@ function find_delay(
     metric in (:simulation, :prediction) || throw(ArgumentError("metric must be :simulation or :prediction"))
     delays = collect(Int, delays)
     isempty(delays) && throw(ArgumentError("delays must not be empty"))
+    d.Ts === nothing || dval.Ts === nothing || d.Ts == dval.Ts ||
+        throw(ArgumentError("The sample times of the estimation data ($(d.Ts)) and the validation data ($(dval.Ts)) differ."))
+    # Number of initial samples for which the one-step prediction of every candidate is unavailable
+    skip_min = metric === :prediction ? max(na, nb + maximum(delays) - 1) : 0
     if skip < 0
-        skip = metric === :prediction ? max(na, nb + maximum(delays) - 1) : 0
+        skip = skip_min
+    elseif skip < skip_min
+        throw(ArgumentError("skip must be at least $skip_min for metric = :prediction, since the prediction is unavailable for the first samples of the candidate models with the longest regressors."))
     end
     skip < length(dval) || throw(ArgumentError("skip must be smaller than the length of the validation data"))
     y = vec(output(dval))
@@ -92,6 +98,7 @@ function find_delay(
         e = (y .- yh)[skip+1:end]
         sqrt(mean(abs2, e)) / scale
     end
+    any(isfinite, loss) || error("No candidate delay resulted in a finite loss.")
     _, i = findmin(l -> isfinite(l) ? l : Inf, loss)
     DelaySweep(delays[i], delays, loss, d.Ts === nothing ? 0.0 : Float64(d.Ts))
 end

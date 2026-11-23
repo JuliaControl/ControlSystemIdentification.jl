@@ -27,12 +27,22 @@ sweep = find_delay(dt, 4, 4, 0:40; dval = dv)
 # keyword arguments are forwarded to arx
 sweep = find_delay(d, 2, 2, 15:25; λ = 1e-10)
 @test sweep.delay == τ_samples + 1
+k = τ_samples + 1
+loss(λ) = find_delay(d, 2, 2, k:k; λ).loss[]
+G = arx(d, 2, 2; inputdelay = k, λ = 100)
+Gs = ss(G)
+yh = vec(simulate(Gs, d, zeros(Gs.nx)))
+@test loss(100) ≈ sqrt(mean(abs2, vec(d.y) .- yh)) / std(vec(d.y), corrected = false)
+@test loss(100) > 10loss(0)
 
 # plotting and display
 plot(sweep)
 show(IOBuffer(), MIME("text/plain"), sweep)
 
 # error handling
+@test_throws ArgumentError find_delay(d, 2, 2, 0:40; metric = :prediction, skip = 0)
+@test_throws ArgumentError find_delay(d, 2, 2, 0:5; dval = iddata(y, u, 2Ts))
+@test_throws ErrorException find_delay(d, 2, 2, 1:3; dval = iddata(y, fill(Inf, 1, 400), Ts))
 @test_throws ArgumentError find_delay(d, 2, 2, 0:40; metric = :foo)
 @test_throws ArgumentError find_delay(d, 2, 2, 1:0)
 @test_throws ArgumentError find_delay(iddata(randn(2, 50), randn(1, 50), 1), 2, 2)

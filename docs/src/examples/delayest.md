@@ -29,7 +29,7 @@ P.nx
 ```
 
 ### The delay convention
-A discrete-time system that is strictly proper has at least a one-sample delay between the input and the output, the output at time ``k`` cannot depend on the input at time ``k``. The `inputdelay` keyword of, e.g., [`arx`](@ref) counts this sample: the default `inputdelay = 1` is a system without any additional delay, `inputdelay = 0` is a system with a direct term, and a system with a pure delay of ``n`` samples has `inputdelay = n + 1`. The system `P` above has a pure delay of `τ_samples` samples, and thus corresponds to `inputdelay = τ_samples + 1`. We will use this convention throughout this page.
+A discrete-time system that is strictly proper has at least a one-sample delay between the input and the output, the output at time ``k`` cannot depend on the input at time ``k``. The `inputdelay` keyword of, e.g., [`arx`](@ref) counts this sample: the default `inputdelay = 1` is a system without any additional delay, `inputdelay = 0` is a system with a direct term, and a strictly proper system with a relative degree of one and a pure delay of ``n`` samples has `inputdelay = n + 1` (in general, `inputdelay = n + r` for a relative degree ``r``). The system `P` above has a pure delay of `τ_samples` samples, and thus corresponds to `inputdelay = τ_samples + 1`. We will use this convention throughout this page.
 
 ### Cross-correlation
 A simple, non-parametric way of figuring out whether or not there's a delay in the system is to look at the cross-correlation between the input and the output, we can do this using the [`crosscorplot`](@ref) function:
@@ -37,7 +37,7 @@ A simple, non-parametric way of figuring out whether or not there's a delay in t
 ```@example DELAY
 crosscorplot(d, -10:40)
 ```
-The dashed lines indicate the confidence interval within which the correlation is considered insignificant, but they are only valid if the input is white. The cross-correlation between the input and the output is the impulse response of the system convolved with the autocorrelation of the input. If the input is not white, as in this case, the autocorrelation of the input causes the correlation to leak into lags that are _shorter_ than the delay, and the plot above indicates a significant correlation at lags well below the true delay of two seconds.
+The dashed lines indicate the confidence interval within which the correlation is considered insignificant, but they are only valid if the input is white. The cross-correlation between the input and the output is the impulse response of the system convolved with the autocorrelation of the input. If the input is not white, as in this case, the autocorrelation of the input causes a correlation to appear also at lags that are _shorter_ than the delay, and the plot above indicates a significant correlation at lags well below the true delay of two seconds.
 
 To remedy this, we _prewhiten_ the input: we estimate an autoregressive model [`ar`](@ref) of the input, and filter both the input and the output through the inverse of this model. Since the same linear filter is applied to both signals, the delay is unaffected, but the input is now approximately white and the confidence bounds are valid:
 
@@ -79,7 +79,7 @@ plot(
 )
 plot!(impulse(P, 10), lab="True", framestyle=:zerolines, sp=2)
 ```
-The dashed lines in the right plot indicate the confidence interval of the estimate. The validation curve shows how the choice of ``λ`` is a trade-off between bias and variance: for small values the FIR model, which has about as many parameters as there are samples, adapts to the noise, and for large values the impulse response is suppressed. The best validation fit is obtained for an intermediate value. The number of coefficients `n` must be large enough to cover both the delay and the response of the system, and the result depends on the excitation, the number of samples and the noise level, and not only on the delay. If the dataset is small, the cross-correlation and the delay sweep below are less demanding alternatives.
+The dashed lines in the right plot indicate an approximate interval of two standard deviations of the estimate, which does not account for the bias introduced by the regularization. The validation curve shows how the choice of ``λ`` is a trade-off between bias and variance: for small values the FIR model, which has about as many parameters as there are samples, adapts to the noise, and for large values the impulse response is suppressed. The best validation fit is obtained for an intermediate value. The number of coefficients `n` must be large enough to cover both the delay and the response of the system, and the result depends on the excitation, the number of samples and the noise level, and not only on the delay. If the dataset is small, the cross-correlation and the delay sweep below are less demanding alternatives.
 
 ### Delay sweep
 A third method is to estimate a low-order model for each of a number of candidate delays, and compare how well the models explain the validation data. The function [`find_delay`](@ref) fits an [`arx`](@ref) model with `inputdelay = k` for each candidate `k` and returns the one with the smallest simulation error on the validation data. The orders `na` and `nb` should be chosen to represent the system _without_ delay, and `nb` should not be much larger than the number of numerator coefficients of that system, since a long B polynomial can compensate a too short delay on its own. The delay-free system above has two numerator coefficients, and two poles. Since [`arx`](@ref) is biased by output noise, we choose a slightly larger `na` for the noisy data:
@@ -106,7 +106,7 @@ The prediction error tends to decrease once `nb` is large enough to cover the de
 ```@example DELAY
 c2d(tf(1, [1, 0.5, 1]), Ts)
 ```
-The criterion does not have a sharp minimum in this case, and models with a smaller `nb` and a dedicated `inputdelay` are more parsimonious, which is what [`find_delay`](@ref) takes advantage of.
+The criterion does not have a sharp minimum in this case, and models with a smaller `nb` and a dedicated `inputdelay` are more parsimonious, which is the approach of [`find_delay`](@ref).
 
 
 ## Handling the delay when estimating a model
@@ -129,7 +129,7 @@ bodeplot([P, P̂τ], lab=["True system" "" "Estimated system" ""])
 The estimated model should now match the true system very well, including the large drop in phase for higher frequencies due to the delay.
 
 !!! note "Input delay or output delay"
-    For a single-input single-output transfer function, `P̂*delay(τ, Ts)` and `delay(τ, Ts)*P̂` are the same transfer function. They are, however, different state-space realizations with different state variables: the delay states are located before or after the dynamics, so the initial state of the model has a different interpretation, and the estimated state of a state estimator built on the model is different. For multiple-input systems, an input delay and an output delay are different systems.
+    For a single-input single-output transfer function, `P̂*delay(τ, Ts)` and `delay(τ, Ts)*P̂` are the same transfer function. They are, however, different state-space realizations with different state variables: the delay state variables are located before or after the dynamics, so the initial state of the model has a different interpretation, and the estimated state of a state estimator built on the model is different. For multiple-input systems, an input delay and an output delay are different systems.
 
 
 !!! warning "Internal delays"
@@ -190,10 +190,11 @@ In a practical scenario, estimating a model of such high order may be difficult.
 
 If we use one of the methods that support the `inputdelay` keyword, we can see whether or not we can approximate the closed-loop system with a model that has an input delay only. We let the delay sweep select the delay, and compare the validation error to the error of the candidate models:
 ```@example DELAY
-sweepG = find_delay(dG, 4, 4, 0:40)
+dGval = iddata(lsim(G, colored(500))) # Validation data from a separate experiment
+sweepG = find_delay(dG, 4, 4, 0:40; dval = dGval)
 plot(sweepG)
 ```
-The simulation error has a distinct minimum, which indicates that the closed-loop system is well approximated by a model of low order with an input delay. Note that the selected delay does not have to equal the delay of the open-loop system exactly: the delayed channel is inside of the loop, and the estimated model is an approximation of the closed-loop system. We estimate a model with the selected delay:
+The simulation error on the validation data has a distinct minimum, and is small in absolute terms (the normalized RMS error is displayed in the figure), which indicates that the closed-loop system is well approximated by a model of low order with an input delay. Note that the selected delay does not have to equal the delay of the open-loop system exactly: the delayed channel is inside of the loop, and the estimated model is an approximation of the closed-loop system. We estimate a model with the selected delay:
 ```@example DELAY
 model2 = arx(dG, 4, 4, inputdelay=sweepG.delay)
 plot(
@@ -232,7 +233,7 @@ The model-selection plot below indicates that we need to reach model orders of 2
 find_nanb(decho, 3:30, 5:30, xrotation=90, size=(800, 300), margin=5Plots.mm, xtickfont=6)
 ```
 
-This time, the delay sweep does not find any delay for which a low-order model with an input delay fits the data well, in contrast to the previous example. Note that the candidate delays include zero, the response of the system to the input is immediate in this case since the forward path does not contain any delay, and a model with an input delay is thus not a suitable structure:
+This time, the delay sweep does not find any delay for which a low-order model with an input delay fits the data well, in contrast to the previous example. Note that the candidate delays include zero: the forward path of this system does not contain any transport delay, the output starts to respond to the input after the minimum delay of the delay-free dynamics, and a model with a long input delay is thus not a suitable structure:
 ```@example DELAY
 sweepE = find_delay(decho, 4, 4, 0:40)
 plot(sweepE)
