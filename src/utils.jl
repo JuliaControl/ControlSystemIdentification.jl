@@ -129,11 +129,14 @@ modelfit(y::T, yh::T) where {T<:AbstractVector} =
 
 Akaike's Information Criterion (AIC) for model order selection.
 
-`e` is the prediction errors and `d` is the number of parameters estimated.
+`e` is the prediction errors and `d` is the number of parameters estimated. The criterion is normalized by the number of samples `N = length(e)`, i.e., it is computed as `log(sse(e) / N) + 2d / N`.
 
 See also [`fpe`](@ref).
 """
-aic(x::AbstractVector, d) = log(sse(x)) .+ 2d / size(x, 2)
+function aic(x::AbstractVector, d)
+    N = length(x)
+    log(sse(x) / N) + 2d / N
+end
 
 "See [`modelfit`](@ref)"
 const nrmse = modelfit

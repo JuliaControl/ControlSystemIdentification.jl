@@ -109,6 +109,11 @@ end
         include("test_arx.jl")
     end
 
+    @testset "find_delay" begin
+        @info "Testing find_delay"
+        include("test_delay.jl")
+    end
+
     @testset "ar" begin
         @info "Testing ar"
         include("test_ar.jl")
