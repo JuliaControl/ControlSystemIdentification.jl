@@ -211,13 +211,13 @@ ControlSystemIdentification.noise_model
 Video tutorials performing statespace estimation are available here:
 
 ```@raw html
-<iframe style="height: 315px; width: 560px" src="https://www.youtube.com/embed/LEZL7UjS2sY?si=u19Q1iIveG6Per3W" title="YouTube video player" frameborder="0" allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture" allowfullscreen></iframe>
+<iframe style="height: 315px; width: 560px" src="https://www.youtube.com/embed/LEZL7UjS2sY?si=u19Q1iIveG6Per3W" title="YouTube video player" frameborder="0" allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture" referrerpolicy="strict-origin-when-cross-origin" allowfullscreen></iframe>
 ```
 
 ```@raw html
-<iframe style="height: 315px; width: 560px" src="https://www.youtube.com/embed/4fzElP1xeAw?si=bAhIljvyuTHg32H8" title="YouTube video player" frameborder="0" allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture" allowfullscreen></iframe>
+<iframe style="height: 315px; width: 560px" src="https://www.youtube.com/embed/4fzElP1xeAw?si=bAhIljvyuTHg32H8" title="YouTube video player" frameborder="0" allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture" referrerpolicy="strict-origin-when-cross-origin" allowfullscreen></iframe>
 ```
 
 ```@raw html
-<iframe style="height: 315px; width: 560px" src="https://www.youtube.com/embed/z8o83UORuqQ" title="YouTube video player" frameborder="0" allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture" allowfullscreen></iframe>
+<iframe style="height: 315px; width: 560px" src="https://www.youtube.com/embed/z8o83UORuqQ" title="YouTube video player" frameborder="0" allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture" referrerpolicy="strict-origin-when-cross-origin" allowfullscreen></iframe>
 ```

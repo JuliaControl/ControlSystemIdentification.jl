@@ -173,5 +173,5 @@ plot(p1, p2, layout=(2,1), size=(600, 400))
 ## Design Guidelines Video
 
 ```@raw html
-<iframe style="height: 315px; width: 560px" src="https://www.youtube.com/embed/QMO8cDpjw5U?si=MZuC1BwKoLtgGJ_y" title="YouTube video player" frameborder="0" allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture" allowfullscreen></iframe>
+<iframe style="height: 315px; width: 560px" src="https://www.youtube.com/embed/QMO8cDpjw5U?si=MZuC1BwKoLtgGJ_y" title="YouTube video player" frameborder="0" allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture" referrerpolicy="strict-origin-when-cross-origin" allowfullscreen></iframe>
 ```
