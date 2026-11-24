@@ -76,6 +76,8 @@ export kautz, laguerre, laguerre_oo, laguerre_id, adhocbasis, sum_basis, basis_r
 
 export autocorplot, crosscorplot, modelfit, residualplot
 
+export find_delay, DelaySweep
+
 export prbs, chirp, multisine, step_signal
 
 include("utils.jl")
@@ -83,6 +85,7 @@ include("types.jl")
 include("frd.jl")
 include("pem.jl")
 include("arx.jl")
+include("delay.jl")
 include("subspace.jl")
 include("subspace2.jl")
 include("spectrogram.jl")

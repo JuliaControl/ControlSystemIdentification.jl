@@ -1,6 +1,6 @@
 using Test
 using ControlSystemIdentification
-using ControlSystemIdentification: time1, time2, rms, sse, mse, fpe, modelfit
+using ControlSystemIdentification: time1, time2, rms, sse, mse, fpe, aic, modelfit
 using Statistics
 v = zeros(2)
 M = zeros(2, 4)
@@ -28,6 +28,11 @@ y = randn(1, 3)
 
 @test fpe(zeros(5), 3) == 0
 @test fpe(zeros(2, 5), 3) == 0
+
+# aic of a vector is normalized by the number of samples, so that the penalty is 2d/N
+e = [1.0, -1.0, 2.0, -2.0]
+@test aic(e, 3) ≈ log(sum(abs2, e) / 4) + 2 * 3 / 4
+@test aic(repeat(e, 10), 3) ≈ log(sum(abs2, e) / 4) + 2 * 3 / 40
 
 @test sse(y)[] ≈ sum(abs2, y)
 @test mse(y)[] ≈ mean(abs2, y)
