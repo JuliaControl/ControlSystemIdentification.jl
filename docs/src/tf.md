@@ -92,7 +92,7 @@ See also function [`arma`](@ref) for estimation of signal models without inputs.
 
 A video using the function [`arx`](@ref) is available here:
 ```@raw html
-<iframe style="height: 315px; width: 560px" src="https://www.youtube.com/embed/HSx28O956kA" title="YouTube video player" frameborder="0" allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture" allowfullscreen></iframe>
+<iframe style="height: 315px; width: 560px" src="https://www.youtube.com/embed/HSx28O956kA" title="YouTube video player" frameborder="0" allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture" referrerpolicy="strict-origin-when-cross-origin" allowfullscreen></iframe>
 ```
 
 ## Time-series modeling
@@ -122,5 +122,5 @@ Video tutorials performing transfer-function estimation are available here:
 
 
 ```@raw html
-<iframe style="height: 315px; width: 560px" src="https://www.youtube.com/embed/ljrGtJPzlRk?si=CyJnGrRQ-qA6Wwf-" title="YouTube video player" frameborder="0" allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture" allowfullscreen></iframe>
+<iframe style="height: 315px; width: 560px" src="https://www.youtube.com/embed/ljrGtJPzlRk?si=CyJnGrRQ-qA6Wwf-" title="YouTube video player" frameborder="0" allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture" referrerpolicy="strict-origin-when-cross-origin" allowfullscreen></iframe>
 ```

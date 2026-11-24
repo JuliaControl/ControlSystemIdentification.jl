@@ -45,7 +45,7 @@ This package is implemented in the free and open-source programming language [Ju
 If you are new to this package, start your journey through the documentation by learning about [Identification data](@ref). Examples are provided in the Examples section and in the form of jupyter notebooks [here](https://github.com/JuliaControl/ControlExamples.jl). An introductory video series using this package is available below
 
 ```@raw html
-<iframe width="560" height="315" src="https://www.youtube.com/embed/RnuHqkP4QTw?si=F2STrE4QG_6vpUtN" title="YouTube video player" frameborder="0" allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture" allowfullscreen></iframe>
+<iframe width="560" height="315" src="https://www.youtube.com/embed/RnuHqkP4QTw?si=F2STrE4QG_6vpUtN" title="YouTube video player" frameborder="0" allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture" referrerpolicy="strict-origin-when-cross-origin" allowfullscreen></iframe>
 ```
 
 See also the [YouTube playlist](https://youtube.com/playlist?list=PLC0QOsNQS8ha6SwaNOZDXyG9Bj8MPbF-q&si=AiOZVhBVwYReDrAm) with the entire video series.
